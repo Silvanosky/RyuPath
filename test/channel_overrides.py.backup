@@ -1,0 +1,149 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+© Copyright 2015-2016, 3D Robotics.
+
+channel_overrides.py: 
+
+Demonstrates how set and clear channel-override information.
+
+# NOTE: 
+Channel overrides (a.k.a "RC overrides") are highly discommended (they are primarily implemented 
+for simulating user input and when implementing certain types of joystick control).
+
+They are provided for development purposes. Please raise an issue explaining why you need them
+and we will try to find a better alternative: https://github.com/dronekit/dronekit-python/issues
+
+Full documentation is provided at http://python.dronekit.io/examples/channel_overrides.html
+"""
+from __future__ import print_function
+from dronekit import connect, VehicleMode, LocationGlobalRelative
+import time
+
+import signal
+import sys
+
+def signal_handler(sig, frame):
+    print('You pressed Ctrl+C!')
+    while vehicle.armed:
+        vehicle.armed = False
+
+    vehicle.close()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+
+#Set up option parsing to get connection string
+import argparse  
+parser = argparse.ArgumentParser(description='Example showing how to set and clear vehicle channel-override information.')
+parser.add_argument('--connect', 
+                   help="vehicle connection target string. If not specified, SITL automatically started and used.")
+parser.add_argument('--manual', 
+                   help="Setup the sequence in manual mode, otherwise stabilize")
+args = parser.parse_args()
+
+connection_string = args.connect
+manual_mode = False
+if args.manual:
+    manual_mode = True
+
+# Connect to the Vehicle
+print('Connecting to vehicle on: %s' % connection_string)
+vehicle = connect(connection_string, wait_ready=False)
+
+print("Starting")
+if manual_mode:
+    print("Using manual mode")
+    vehicle.mode = VehicleMode("MANUAL")
+else:
+    print("Using stabilize mode")
+    vehicle.mode = VehicleMode("STABILIZE")
+
+vehicle.armed = True
+# Confirm vehicle armed before attempting to take off
+while not vehicle.armed:
+    print(" Waiting for arming...")
+    time.sleep(0.1)
+
+# Override channels
+print("\nChannel overrides: %s" % vehicle.channels.overrides)
+
+#vehicle.wait_ready(True)
+
+v = 72
+def pwm(channel, direction):
+    return {channel : 1500 + (v * direction)}
+
+#UP = pwm('3', -1)
+#DOWN = pwm('3', 1)
+#FORWARD = pwm('4', 1)
+#BACKWARD = pwm('4', -1)
+#RIGHT = pwm('5', 1)
+#LEFT = pwm('5', -1)
+
+AVANCE = 1
+DROITE = 2
+BAS = 3
+
+NORMAL = 1
+REVERSE = -1
+
+def print_action(a, direction):
+    if a == AVANCE:
+        print("going forward")
+    if a == DROITE:
+        print("going right")
+    if a == BAS:
+        print("going down")
+    print(direction)
+
+
+def action(a, direction, t):
+    print_action(a, direction)
+    for i in range(t * 100):
+        if not vehicle.armed:
+            vehicle.armed = True
+        if a == AVANCE:
+            vehicle.channels.overrides['5'] = 1500 + (v * direction)
+        if a == DROITE:
+            vehicle.channels.overrides['4'] = 1500 + (v * direction)
+        if a == BAS:
+            vehicle.channels.overrides['3'] = 1500 + (v * direction)
+        time.sleep(1. / 100)
+    reset()
+
+def reset():
+    vehicle.channels.overrides['3'] = 1500
+    vehicle.channels.overrides['4'] = 1500
+    vehicle.channels.overrides['5'] = 1500
+    time.sleep(1.)
+
+#------------- START SEQUENCE
+action(BAS,     REVERSE, 30)
+action(AVANCE,  REVERSE, 10)
+action(DROITE,  NORMAL, 3)
+action(AVANCE,  REVERSE, 5)
+action(DROITE,  NORMAL, 3)
+action(AVANCE,  REVERSE, 8)
+action(BAS,     REVERSE, 30)
+action(DROITE,  REVERSE, 3)
+action(AVANCE,  REVERSE, 5)
+action(DROITE,  REVERSE, 3)
+action(AVANCE,  REVERSE, 5)
+#------------- END SEQUENCE
+reset()
+reset()
+reset()
+
+while vehicle.armed:
+    vehicle.armed = False
+
+time.sleep(2)
+
+#Close vehicle object before exiting script
+print("\nClose vehicle object")
+vehicle.close()
+
+
+print("Completed")
